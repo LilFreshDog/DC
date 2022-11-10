@@ -247,6 +247,7 @@ class Recover(Online):
         node.failed = False
         super().process(sim)
         sim.schedule(exp_rv(node.average_lifetime), Fail(node))
+        self.free_space = self.storage_size - self.block_size * self.n
 
 
 class Disconnection(NodeEvent):
