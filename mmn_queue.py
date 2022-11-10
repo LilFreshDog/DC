@@ -4,7 +4,7 @@ import argparse
 import csv
 import collections
 from queue import Empty
-from random import expovariate
+from random import expovariate, sample
 
 from discrete_event_sim import Simulation, Event
 
@@ -17,16 +17,17 @@ from discrete_event_sim import Simulation, Event
 
 class MMN(Simulation):
 
-    def __init__(self, lambd, mu, n):
+    def __init__(self, lambd:float, mu:float, n:int, d:float):
         
         super().__init__()
         self.running = None  # if not None, the id of the running job
-        #self.queue = collections.deque()  # FIFO queue of the system
-        self.queues = [collections.deque() for _ in range(n)] # new multiple queues
+        self.queues = [collections.deque() for _ in range(n)] # FIFO queues of the system
         self.arrivals = {}  # dictionary mapping job id to arrival time
         self.completions = {}  # dictionary mapping job id to completion time
         self.lambd = lambd
         self.n = n
+        self.d = int(n * d) # number of queues to monitor (supermarket model)
+        if self.d < 1: self.d = 1
         self.mu = mu
         self.arrival_rate = lambd / n
         self.completion_rate = mu / n
@@ -58,21 +59,25 @@ class Arrival(Event):
     def process(self, sim: MMN):
         #print("process arrival:", self.id)
         # set the arrival time of the job
-        sim.arrivals[self.id] = sim.t + sim.arrival_rate
+        sim.arrivals[self.id] = sim.t
+    
         # if there is no running job, assign the incoming one and schedule its completion
         if sim.running is None:
             sim.running = self.id
             sim.schedule_completion(self.id)
-        # otherwise put the job into the queue
+        # otherwise put the job into the queue (DONE: check just a subset d of queues)
         else:
-            #min_queue = sim.queues[0] #[queue for queue in sim.queues if len(queue) == min([len(queue) for queue in sim.queues])]
-            min_queue = None
-            min_length = 100_000_000_000_000
-            for queue in sim.queues:
+            # supermarket model implementation for n queues
+            # we are monitoring a subset of queues (d % n)
+            sampled_queues = sample(sim.queues, sim.d)
+            min_queue = sampled_queues[0]
+            min_length = len(sampled_queues[0])
+            for queue in sampled_queues:
                 if len(queue) < min_length:
                     min_length = len(queue)
                     min_queue = queue
             min_queue.append(self.id)
+
         # schedule the arrival of the next job
         sim.schedule_arrival(self.id + 1)
 
@@ -104,15 +109,20 @@ class Completion(Event):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--lambd', type=float, default=0.7)         # prob. of new job arrival
-    parser.add_argument('--mu', type=float, default=1)              # prob. of job completion
-    parser.add_argument('--max-t', type=float, default=1_000_000)   # max. simulated time
-    parser.add_argument('--n', type=int, default=1)                 # number of simulated servers
-    parser.add_argument('--csv', help="CSV file in which to store results")
+    parser = argparse.ArgumentParser(
+        prog = 'mmn_queue',
+        description = 'Simulation of a multi-server system using a `M/M/n queue`',
+        epilog = '2022 UniGe - 👊 github.com/GiorgioRen x github.com/thaMilo 👊'
+        )
+    parser.add_argument('--lambd',  type=float, default=0.7,        help="The probability of new job arrival")
+    parser.add_argument('--mu',     type=float, default=1,          help="The probability of job completion")
+    parser.add_argument('--max-t',  type=float, default=1_000_000,  help="Max simulated time")
+    parser.add_argument('--n',      type=int,   default=1,          help="Number of simulated servers")
+    parser.add_argument('--d',      type=float, default=1,          help="Percentage of queues to be monitored in supermarket model")
+    parser.add_argument('--csv',                                    help="CSV file in which to store results")
     args = parser.parse_args()
 
-    sim = MMN(args.lambd, args.mu, args.n)
+    sim = MMN(args.lambd, args.mu, args.n, args.d)
     sim.run(args.max_t)
 
     completions = sim.completions
