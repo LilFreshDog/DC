@@ -111,7 +111,7 @@ class Completion(Event):
 def main():
     parser = argparse.ArgumentParser(
         prog = 'mmn_queue',
-        description = 'Simulation of a multi-server system using a `M/M/n queue`',
+        description = 'Simulation of a multi-server system using a M/M/n queue',
         epilog = '2022 UniGe - 👊 github.com/GiorgioRen x github.com/thaMilo 👊'
         )
     parser.add_argument('--lambd',  type=float, default=0.7,        help="The probability of new job arrival")
