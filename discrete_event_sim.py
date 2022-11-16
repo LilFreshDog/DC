@@ -39,13 +39,12 @@ class Simulation:
 
 
 class Event:
-    """
-    Subclass this to represent your events.
+    """Event class
 
-    You may need to define __init__ to set up all the necessary information.
+    :job_id: the id of the job
     """
 
-    def __init__(self, job_id):
+    def __init__(self, job_id:int):
         self.job_id = job_id
 
     def __lt__(self, other):

@@ -17,25 +17,32 @@ from discrete_event_sim import Simulation, Event
 
 class MMN(Simulation):
 
-    def __init__(self, lambd:float, mu:float, n:int, d:float):
+    def __init__(self, lambd:float=0.7, mu:float=1, n:int=1, d:float=1):
+        """MMN constructor
+
+        Args:
+            lambd: arrival rate of job in server
+            mu: completion rate of job in server
+            n: number of servers to simulate
+            d: percentage of jobs to be servers to monitor in supermarket model
+        """
         
         super().__init__()
-        self.running = None  # if not None, the id of the running job
+        self.running = None # if not None, the id of the running job
         self.queues = [collections.deque() for _ in range(n)] # FIFO queues of the system
-        self.arrivals = {}  # dictionary mapping job id to arrival time
-        self.completions = {}  # dictionary mapping job id to completion time
+        self.arrivals = {} # dictionary mapping job id to arrival time
+        self.completions = {} # dictionary mapping job id to completion time
         self.lambd = lambd
-        self.n = n
-        self.d = int(n * d) # number of queues to monitor (supermarket model)
-        if self.d < 1: self.d = 1
         self.mu = mu
-        self.arrival_rate = lambd / n
-        self.completion_rate = mu / n
-        self.schedule(expovariate(lambd), Arrival(0))
+        self.n = n if n >=1 else 1
+        self.d = int(n * d) if n * d >= 1 else 1 # number of queues to monitor (supermarket model)
+        self.arrival_rate = lambd * n
+        self.completion_rate = mu
+        self.schedule(expovariate(self.arrival_rate), Arrival(0))
 
     def schedule_arrival(self, job_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
-        # time should depend also on "n"   
+        # time should depend also on "n"
         self.schedule(expovariate(self.arrival_rate), Arrival(job_id))
 
     def schedule_completion(self, job_id):
@@ -57,7 +64,7 @@ class Arrival(Event):
         self.id = job_id
 
     def process(self, sim: MMN):
-        #print("process arrival:", self.id)
+        #print("process arrival:", self.id, end='\r')
         # set the arrival time of the job
         sim.arrivals[self.id] = sim.t
     
@@ -88,20 +95,21 @@ class Completion(Event):
         self.id = job_id  # currently unused, might be useful when extending
 
     def process(self, sim: MMN):
-        #print("process completion:", self.id)
+        #print("process completion:", self.id, end='\r')
         assert sim.running is not None
         # set the completion time of the running job
         sim.completions[sim.running] = sim.t + sim.completion_rate
         # if the queue is not empty
-        if [queue for queue in sim.queues if len(queue) != 0]:
-            job_to_complete = None #[queue for queue in sim.queues if queue[0] == min([ queue[0] for queue in sim.queues])] # is not empty
-            min = 100_000_000_000_000
+
+        if [queue for queue in sim.queues if len(queue) != 0]: # cicla su tutte le code non vuote
+            job_to_complete_queue = None # il job da completare
+            min = 1000000000000000 # id minimo presente tra le teste delle code
             for queue in sim.queues:
                 if len(queue) != 0 and queue[0] < min:
                     min = queue[0]
-                    job_to_complete = queue
+                    job_to_complete_queue = queue
             # get a job from the queues
-            sim.running = job_to_complete.popleft()
+            sim.running = job_to_complete_queue.popleft()
             # schedule its completion
             sim.schedule_completion(sim.running)
         else:
@@ -133,7 +141,7 @@ def main():
     if args.csv is not None:
         with open(args.csv, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([args.lambd, args.mu, args.max_t, W])
+            writer.writerow([args.lambd, args.mu, args.n, args.d, args.max_t, W])
 
 
 if __name__ == '__main__':
