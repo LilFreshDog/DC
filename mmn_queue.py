@@ -3,7 +3,6 @@
 import argparse
 import csv
 import collections
-from queue import Empty
 from random import expovariate, sample
 
 from discrete_event_sim import Simulation, Event
@@ -38,16 +37,16 @@ class MMN(Simulation):
         self.d = int(n * d) if n * d >= 1 else 1 # number of queues to monitor (supermarket model)
         self.arrival_rate = lambd * n
         self.completion_rate = mu
-        self.schedule(expovariate(self.arrival_rate), Arrival(0))
+        self.schedule(expovariate(self.arrival_rate), Arrival(0, 0))
 
-    def schedule_arrival(self, job_id):
+    def schedule_arrival(self, job_id, queue_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
         # time should depend also on "n"
-        self.schedule(expovariate(self.arrival_rate), Arrival(job_id))
+        self.schedule(expovariate(self.arrival_rate), Arrival(job_id, queue_id))
 
-    def schedule_completion(self, job_id):
+    def schedule_completion(self, job_id, queue_id):
         # schedule the time of the completion event
-        self.schedule(self.completion_rate, Completion(job_id))
+        self.schedule(self.completion_rate, Completion(job_id, queue_id))
 
     @property
     def queue_len(self):
@@ -60,39 +59,45 @@ class MMN(Simulation):
 
 class Arrival(Event):
 
-    def __init__(self, job_id):
+    def __init__(self, job_id, queue_id):
         self.id = job_id
+        self.queue_id = queue_id
 
     def process(self, sim: MMN):
         #print("process arrival:", self.id, end='\r')
         # set the arrival time of the job
         sim.arrivals[self.id] = sim.t
-    
+        # supermarket model implementation for n queues
+        # we are monitoring a subset of queues (d % n)
+
+        sampled_queues_indexes = sample(range(len(sim.queues)), sim.d)    
+        min_queue = sim.queues[sampled_queues_indexes[0]]
+        min_length = len(min_queue)
+        min_index = sampled_queues_indexes[0]
+
+        for queue_index in sampled_queues_indexes :
+            if len(sim.queues[queue_index]) < min_length:
+                min_length = len(sim.queues[queue_index])
+                min_queue = sim.queues[queue_index]
+                min_index = queue_index
+
         # if there is no running job, assign the incoming one and schedule its completion
         if sim.running is None:
             sim.running = self.id
-            sim.schedule_completion(self.id)
+            sim.schedule_completion(self.id, min_index)
         # otherwise put the job into the queue (DONE: check just a subset d of queues)
         else:
-            # supermarket model implementation for n queues
-            # we are monitoring a subset of queues (d % n)
-            sampled_queues = sample(sim.queues, sim.d)
-            min_queue = sampled_queues[0]
-            min_length = len(sampled_queues[0])
-            for queue in sampled_queues:
-                if len(queue) < min_length:
-                    min_length = len(queue)
-                    min_queue = queue
             min_queue.append(self.id)
 
         # schedule the arrival of the next job
-        sim.schedule_arrival(self.id + 1)
+        sim.schedule_arrival(self.id + 1, min_index )
 
 
 class Completion(Event):
 
-    def __init__(self, job_id):
+    def __init__(self, job_id, queue_id):
         self.id = job_id  # currently unused, might be useful when extending
+        self.queue_id = queue_id
 
     def process(self, sim: MMN):
         #print("process completion:", self.id, end='\r')
@@ -100,21 +105,24 @@ class Completion(Event):
         # set the completion time of the running job
         sim.completions[sim.running] = sim.t + sim.completion_rate
         # if the queue is not empty
+        # check if all queus are empty
+        if any(len(queue) > 0 for queue in sim.queues):
+            #if not take the job from the queuse with the least id and schedule its completion
+            min_queue = None
+            min_index = 0
 
-        if [queue for queue in sim.queues if len(queue) != 0]: # cicla su tutte le code non vuote
-            job_to_complete_queue = None # il job da completare
-            min = 1000000000000000 # id minimo presente tra le teste delle code
             for queue in sim.queues:
-                if len(queue) != 0 and queue[0] < min:
-                    min = queue[0]
-                    job_to_complete_queue = queue
-            # get a job from the queues
-            sim.running = job_to_complete_queue.popleft()
-            # schedule its completion
-            sim.schedule_completion(sim.running)
-        else:
-            sim.running = None
+                if len(queue) > 0:
+                    if min_queue is None or queue[0] < min_queue[0]:
+                        min_queue = queue
+                        min_index = sim.queues.index(queue)
 
+            sim.running = min_queue.popleft()
+            sim.schedule_completion(sim.running, min_index)
+
+        else:    
+            #if yes sim.running = None because there are no jobs to be scheduled
+            sim.running = None
 
 def main():
     parser = argparse.ArgumentParser(
