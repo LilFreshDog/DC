@@ -23,9 +23,14 @@ class MMN(Simulation):
         self.queues = [collections.deque() for i in range(n)]  # FIFO queues of the system
         self.arrivals = {}  # dictionary mapping job id to arrival time
         self.completions = {}  # dictionary mapping job id to completion time
-        self.lambd = lambd
-        self.n = n
-        self.mu = mu
+        self.lambd = lambd # arrival rate
+        self.mu = mu # completion rate
+        self.n = n # number of queues
+        if 0 < d <= n:
+            self.d = d
+        else:
+            print("\nINFO:\n  'd' must be in the range (0, n]\n  automatically set 'd' to 'n'\n")
+            self.d = n
         self.arrival_rate = lambd * n
         self.completion_rate = mu 
         self.schedule(expovariate(lambd), Arrival(0, 0))
@@ -34,10 +39,15 @@ class MMN(Simulation):
         """ returns id of the shortest length queue selected from a subset `d` (supermarket model) """
         sampled_queues_ids = sample(range(self.n), self.d)
         min_queue_id = sampled_queues_ids[0]
-        for queue_id in sampled_queues_ids:
-            if self.queue_len(queue_id) < self.queue_len(min_queue_id):
-                min_queue_id = queue_id
+        for i in sampled_queues_ids:
+            # if self.queue_len(i) < self.queue_len(min_queue_id): # using queue_len()
+            if len(self.queues[i]) < len(self.queues[min_queue_id]):
+                min_queue_id = i
         return min_queue_id
+    
+    def print_queue(self):
+        """ print number of jobs in each queue """
+        print([self.queue_len(i) for i in range(self.n)])
 
     def schedule_arrival(self, job_id, queue_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
@@ -61,7 +71,8 @@ class Arrival(Event):
     def process(self, sim: MMN):
         #set the arrival time of the job
         sim.arrivals[self.id] = sim.t
-        random_queue_id = sample(range(len(sim.queues)), 1)[0]
+        # queue_id = sample(range(len(sim.queues)), 1)[0] # uncomment to select a random queue
+        queue_id = sim.get_min_queue() # uncomment to select the shortest queue (supermarket model)
 
         # if there is no running job in the current queue, start the job
         if sim.running[self.queue_id] is None:
@@ -70,10 +81,10 @@ class Arrival(Event):
         # otherwise put the job into the queue
         else:
             #choose the queue with the shortest length randomly
-            sim.queues[random_queue_id].append(self.id)
+            sim.queues[queue_id].append(self.id)
 
         # schedule the arrival of the next job
-        sim.schedule_arrival(self.id + 1, random_queue_id)
+        sim.schedule_arrival(self.id + 1, queue_id)
 
 class Completion(Event):
     def __init__(self, job_id, queue_id):
@@ -81,6 +92,10 @@ class Completion(Event):
         self.queue_id = queue_id
 
     def process(self, sim: MMN):
+        # DEBUG
+        if (sim.n <= 50):
+            sim.print_queue()
+        
         assert sim.running[self.queue_id] is not None
         # set the completion time of the running job
         sim.completions[sim.running[self.queue_id]] = sim.t + sim.mu
@@ -110,7 +125,7 @@ def main():
     completions = sim.completions
     W = (sum(completions.values()) - sum(sim.arrivals[job_id] for job_id in completions)) / len(completions)
     print(f"Average time spent in the system: {W}")
-    print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd)}")
+    print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd) if args.lambd < 1 else 'inf'}")
 
     if args.csv is not None:
         with open(args.csv, 'a', newline='') as f:
