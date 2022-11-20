@@ -29,19 +29,27 @@ class MMN(Simulation):
         self.arrival_rate = lambd * n
         self.completion_rate = mu 
         self.schedule(expovariate(lambd), Arrival(0, 0))
+    
+    def get_min_queue(self) -> int:
+        """ returns id of the shortest length queue selected from a subset `d` (supermarket model) """
+        sampled_queues_ids = sample(range(self.n), self.d)
+        min_queue_id = sampled_queues_ids[0]
+        for queue_id in sampled_queues_ids:
+            if self.queue_len(queue_id) < self.queue_len(min_queue_id):
+                min_queue_id = queue_id
+        return min_queue_id
 
     def schedule_arrival(self, job_id, queue_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
         # time should depend also on "n"
-        self.schedule( expovariate(self.arrival_rate),Arrival(job_id, queue_id))
+        self.schedule(expovariate(self.arrival_rate), Arrival(job_id, queue_id))
 
     def schedule_completion(self, job_id, queue_id):
         # schedule the time of the completion event
         self.schedule(expovariate(self.completion_rate), Completion(job_id, queue_id))
 
-    @property
-    def queue_len(self):
-        return (self.running is None) + len(self.queue)
+    def queue_len(self, queue_id):
+        return (self.running[queue_id] is None) + len(self.queues[queue_id])
 
 
 class Arrival(Event):
