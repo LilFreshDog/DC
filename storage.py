@@ -140,8 +140,8 @@ class Node:
         # find a block that we have locally but not remotely
         # check `enumerate` and `zip`at https://docs.python.org/3/library/functions.html
         for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):
-            if held_locally and peer is None:
-                return block_id
+            if ... and ... is None:
+                return ...
         return None
 
     def schedule_next_upload(self, sim: Backup):
@@ -156,8 +156,8 @@ class Node:
         for peer, block_id in self.remote_blocks_held.items():
             # if the block is not present locally and the peer is online and not downloading anything currently, then
             # schedule the restore from self to peer of block_id
-            if peer.online and peer.current_download is None and not peer.local_blocks[block_id]:
-                sim.schedule_transfer(self, peer, block_id, restore=True)
+            if ... and ... is None and not peer.local_blocks[block_id]:
+                ...
                 return  # we have found our upload, we stop
 
         # try to back up a block on a locally held remote node
@@ -169,9 +169,9 @@ class Node:
         for peer in sim.nodes:
             # if the peer is not self, is online, is not among the remote owners, has enough space and is not
             # downloading anything currently, schedule the backup of block_id from self to peer
-            if (peer is not self and peer.online and peer not in remote_owners and peer.current_download is None
-                    and peer.free_space >= self.block_size):
-                sim.schedule_transfer(self, peer, block_id, restore=False)
+            if (peer is not self and ... and peer not in ... and peer.current_download is None
+                    and peer.free_space >= ...):
+                ...
                 return
 
     def schedule_next_download(self, sim: Backup):
@@ -186,17 +186,17 @@ class Node:
 
         # first find if we have a missing block to restore
         for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):
-            if not held_locally and peer is not None and peer.online and peer.current_upload is None:
-                sim.schedule_transfer(peer, self, block_id, restore=True)
+            if not ... and peer is not None and ... and ... is None:
+                ...
                 return  # we are done in this case
 
         # try to back up a block for a remote node
         for peer in sim.nodes:
-            if (peer is not self and peer.online and peer.current_upload is None and peer not in self.remote_blocks_held
-                    and self.free_space >= peer.block_size):
+            if (peer is not self and ... and ... is None and peer not in ...
+                    and self.free_space >= ...):
                 block_id = peer.find_block_to_back_up()
                 if block_id is not None:
-                    sim.schedule_transfer(peer, self, block_id, restore=False)
+                    ...
                     return
 
     def __hash__(self):
@@ -232,8 +232,8 @@ class Online(NodeEvent):
             return
         node.online = True
         # schedule next upload and download
-        node.schedule_next_upload(sim)
-        node.schedule_next_download(sim)
+        ...
+        ...
         # schedule the next offline event
         ...
 
@@ -247,7 +247,6 @@ class Recover(Online):
         node.failed = False
         super().process(sim)
         sim.schedule(exp_rv(node.average_lifetime), Fail(node))
-        self.free_space = self.storage_size - self.block_size * self.n
 
 
 class Disconnection(NodeEvent):
@@ -349,7 +348,6 @@ class BlockBackupComplete(TransferComplete):
 
 
 class BlockRestoreComplete(TransferComplete):
-
     def update_block_state(self):
         owner = self.downloader
         owner.local_blocks[self.block_id] = True
@@ -358,11 +356,7 @@ class BlockRestoreComplete(TransferComplete):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog = 'storage 💾',
-        description = 'Simulation of a distributed storage system',
-        epilog = '2022 UniGe - 👊 github.com/GiorgioRen x github.com/thaMilo 👊'
-        )
+    parser = argparse.ArgumentParser()
     parser.add_argument("config", help="configuration file")
     parser.add_argument("--max-t", default="100 years")
     parser.add_argument("--seed", help="random seed")
