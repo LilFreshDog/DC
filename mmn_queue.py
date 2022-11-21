@@ -25,7 +25,7 @@ class MMN(Simulation):
         self.completions = {}  # dictionary mapping job id to completion time
         self.lambd = lambd # arrival rate
         self.mu = mu # completion rate
-        self.n = n # number of queues
+        self.n = n if n > 0 else 1 # number of queues
         if 0 < d <= n:
             self.d = d
         else:
@@ -71,6 +71,7 @@ class Arrival(Event):
     def process(self, sim: MMN):
         #set the arrival time of the job
         sim.arrivals[self.id] = sim.t
+        
         # queue_id = sample(range(len(sim.queues)), 1)[0] # uncomment to select a random queue
         queue_id = sim.get_min_queue() # uncomment to select the shortest queue (supermarket model)
 
@@ -92,13 +93,11 @@ class Completion(Event):
         self.queue_id = queue_id
 
     def process(self, sim: MMN):
-        # DEBUG
-        if (sim.n <= 50):
-            sim.print_queue()
-        
         assert sim.running[self.queue_id] is not None
+        # DEBUG
+        sim.print_queue() if sim.n <= 10 else None
         # set the completion time of the running job
-        sim.completions[sim.running[self.queue_id]] = sim.t + sim.mu
+        sim.completions[sim.running[self.queue_id]] = sim.t
         # if the queue is not empty
         if len(sim.queues[self.queue_id]) > 0:
             # get a job from the queue
