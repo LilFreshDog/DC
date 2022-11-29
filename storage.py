@@ -190,7 +190,7 @@ class Node:
 
         # first find if we have a missing block to restore
         for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):
-            if not held_locally and peer is not None and peer.online and peer.current_download is None:
+            if not held_locally and peer is not None and peer.online and peer.current_upload is None:
                 sim.schedule_transfer(peer, self, block_id, True)
                 return  # we are done in this case
 
