@@ -3,7 +3,7 @@
 import argparse
 import csv
 import collections
-from random import expovariate, sample
+from random import expovariate, sample, randint
 
 from discrete_event_sim import Simulation, Event
 
@@ -38,9 +38,8 @@ class MMN(Simulation):
     def get_min_queue(self) -> int:
         """ returns id of the shortest length queue selected from a subset `d` (supermarket model) """
         sampled_queues_ids = sample(range(self.n), self.d)
-        min_queue_id = sampled_queues_ids[0]
+        min_queue_id = [0]
         for i in sampled_queues_ids:
-            # if self.queue_len(i) < self.queue_len(min_queue_id): # using queue_len()
             if len(self.queues[i]) < len(self.queues[min_queue_id]):
                 min_queue_id = i
         return min_queue_id
@@ -107,26 +106,32 @@ class Completion(Event):
             sim.running[self.queue_id] = None
 
 
-def show_graphs(sim: MMN):
+def show_graphs(result_queues, lambdas):
     import matplotlib.pyplot as plt
     import numpy as np
-    print("Creating graphs...")
-    queue_lenths = [len(queue) for queue in sim.queues if len(queue) > 0 ]
-    #print(queue_lenths)
     import collections
-    counter = collections.Counter(queue_lenths)
-    # sort counter
-    counter = collections.OrderedDict(sorted(counter.items()))
-    print(counter)
-    
-    #modify counter so that the values are the percentage 
-    for key in counter:
-        counter[key] = counter[key] / len(queue_lenths)
-    
-    plt.plot(*zip(*sorted(counter.items())))
 
+    print("Creating graphs...")
+    counters = []
+
+    for i, queue in enumerate(result_queues):
+        queue_lengths = [len(queue) for queue in result_queues[i] if len(queue) > 0]  
+        counter = collections.Counter(queue_lengths)
+        counter = collections.OrderedDict(sorted(counter.items()))
+        for key,value in counter.items():
+            counter[key] = value/len(queue_lengths)
+        counters.append(counter)
+
+    plt.title("Distribution of queue lengths")
+    plt.plot(*zip(*sorted(counters[0].items())), label="lambda = {}".format(lambdas[0]))
+    plt.plot(*zip(*sorted(counters[1].items())), label="lambda = {}".format(lambdas[1]))
+    plt.plot(*zip(*sorted(counters[2].items())), label="lambda = {}".format(lambdas[2]))
+    plt.plot(*zip(*sorted(counters[3].items())), label="lambda = {}".format(lambdas[3]))
+    plt.xlim(0, 14)
+    plt.ylim(0, 1)
     plt.xlabel("Queue length")
     plt.ylabel("Fraction of queues with at leas that size")
+    plt.legend()
     plt.show()
 
 
@@ -141,21 +146,27 @@ def main():
     parser.add_argument('--graph', action='store_true', default=False, help="Enable graphing of results")
     args = parser.parse_args()
 
-    sim = MMN(args.lambd, args.mu, args.n, args.d)
-    sim.run(args.max_t)
+    result_queues = []
+    lambdas_x = [0.5, 0.90,  0.95, 0.99]
+    for lambd_x in lambdas_x:
+        sim = MMN(lambd_x, args.mu, args.n, args.d)
+        sim.run(args.max_t)
 
-    completions = sim.completions
-    W = (sum(completions.values()) - sum(sim.arrivals[job_id] for job_id in completions)) / len(completions)
-    print(f"Average time spent in the system: {W}")
-    print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd) if args.lambd < 1 else 'inf'}")
+        completions = sim.completions
+        W = (sum(completions.values()) - sum(sim.arrivals[job_id] for job_id in completions)) / len(completions)
+        print(f"Average time spent in the system: {W}")
+        print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd ) if args.lambd < 1 else 'inf'}")
 
-    if args.csv is not None:
-        with open(args.csv, 'a', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([args.lambd, args.mu, args.max_t, W])
+        if args.csv is not None:
+            with open(args.csv, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([args.lambd, args.mu, args.max_t, W])
+
+        result_queues.append(sim.queues)
 
     if args.graph:
-        show_graphs(sim)
+        show_graphs(result_queues, lambdas_x)
+
 
 
 if __name__ == '__main__':
