@@ -13,7 +13,6 @@ from typing import Optional, List
 # then you'll need to handle sizes in bytes and time spans in seconds--or write your own alternative.
 # It should be trivial to install (e.g., apt install python3-humanfriendly or conda/pip install humanfriendly).
 from humanfriendly import format_timespan, parse_size, parse_timespan
-
 from discrete_event_sim import Simulation, Event
 
 
@@ -28,7 +27,8 @@ class DataLost(Exception):
 
 
 class Backup(Simulation):
-    """Backup simulation.
+    """
+        Backup simulation.
     """
 
     # type annotations for `Node` are strings here to allow a forward declaration:
@@ -43,10 +43,10 @@ class Backup(Simulation):
             self.schedule(node.arrival_time + exp_rv(node.average_lifetime), Fail(node))
 
     def schedule_transfer(self, uploader: 'Node', downloader: 'Node', block_id: int, restore: bool):
-        """Helper function called by `Node.schedule_next_upload` and `Node.schedule_next_download`.
-
-        If `restore` is true, we are restoring a block owned by the downloader, otherwise, we are saving one owned by
-        the uploader.
+        """
+            Helper function called by `Node.schedule_next_upload` and `Node.schedule_next_download`.
+            If `restore` is true, we are restoring a block owned by the downloader, otherwise, we are saving one owned by
+            the uploader.
         """
 
         block_size = downloader.block_size if restore else uploader.block_size
@@ -60,12 +60,12 @@ class Backup(Simulation):
             event = BlockRestoreComplete(uploader, downloader, block_id)
         else:
             event = BlockBackupComplete(uploader, downloader, block_id)
+
         self.schedule(delay, event)
         uploader.current_upload = downloader.current_download = event
 
-        # DEBUG
-        self.log_info(f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
-                       f" in {format_timespan(delay)}")
+        # self.log_info(f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
+        #               f" in {format_timespan(delay)}")
 
     def log_info(self, msg):
         """Override method to get human-friendly logging for time."""
@@ -75,7 +75,9 @@ class Backup(Simulation):
 
 @dataclass(eq=False)  # auto initialization from parameters below (won't consider two nodes with same state as equal)
 class Node:
-    """Class representing the configuration of a given node."""
+    """
+        Class representing the configuration of a given node.
+    """
 
     # using dataclass is (for our purposes) equivalent to having something like
     # def __init__(self, description, n, k, ...):
@@ -104,7 +106,9 @@ class Node:
     arrival_time: float  # time at which the node will come online
 
     def __post_init__(self):
-        """Compute other data dependent on config values and set up initial state."""
+        """
+            Compute other data dependent on config values and set up initial state.
+        """
 
         # whether this node is online. All nodes start offline.
         self.online: bool = False
@@ -140,7 +144,7 @@ class Node:
 
         # find a block that we have locally but not remotely
         # check `enumerate` and `zip`at https://docs.python.org/3/library/functions.html
-        for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):
+        for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):  #[ (0, (True, Node)), (1, (True, Node))]
             if held_locally and peer is None:
                 return block_id
         return None
@@ -170,9 +174,8 @@ class Node:
         for peer in sim.nodes:
             # if the peer is not self, is online, is not among the remote owners, has enough space and is not
             # downloading anything currently, schedule the backup of block_id from self to peer
-            if (peer is not self and peer.online and peer not in remote_owners and peer.current_download is None
-                    and peer.free_space >= self.block_size):
-                sim.schedule_transfer(self, peer, block_id, restore=False)
+            if (peer is not self and peer.online and peer not in remote_owners and peer.current_download is None and peer.free_space >= self.block_size):
+                sim.schedule_transfer(self, peer, block_id, False)
                 return
 
     def schedule_next_download(self, sim: Backup):
@@ -180,7 +183,7 @@ class Node:
 
         assert self.online
 
-        sim.log_info(f"schedule_next_download on {self}") # DEBUG
+        # sim.log_info(f"schedule_next_download on {self}")
 
         if self.current_download is not None:
             return
@@ -188,7 +191,7 @@ class Node:
         # first find if we have a missing block to restore
         for block_id, (held_locally, peer) in enumerate(zip(self.local_blocks, self.backed_up_blocks)):
             if not held_locally and peer is not None and peer.online and peer.current_download is None:
-                sim.schedule_transfer(self, peer, block_id, restore=True)
+                sim.schedule_transfer(peer, self, block_id, True)
                 return  # we are done in this case
 
         # try to back up a block for a remote node
@@ -197,7 +200,7 @@ class Node:
                     and self.free_space >= peer.block_size):
                 block_id = peer.find_block_to_back_up()
                 if block_id is not None:
-                    sim.schedule_transfer(peer, self, block_id, restore=False)
+                    sim.schedule_transfer(peer, self, block_id, False)
                     return
 
     def __hash__(self):
@@ -237,6 +240,7 @@ class Online(NodeEvent):
         node.schedule_next_download(sim)
         # schedule the next offline event
         sim.schedule(exp_rv(node.average_lifetime), Offline(node))
+        
 
 
 class Recover(Online):
@@ -248,7 +252,6 @@ class Recover(Online):
         node.failed = False
         super().process(sim)
         sim.schedule(exp_rv(node.average_lifetime), Fail(node))
-        self.node.free_space = self.node.storage_size - self.node.block_size * self.node.n
 
 
 class Disconnection(NodeEvent):
@@ -303,8 +306,7 @@ class Fail(Disconnection):
                 owner.schedule_next_upload(sim)  # this node may want to back up the missing block
         node.remote_blocks_held.clear()
         # schedule the next online and recover events
-        recover_time = exp_rv(node.average_recover_time)
-        sim.schedule(recover_time, Recover(node))
+        sim.schedule(exp_rv(node.average_recover_time), Recover(node))
 
 
 @dataclass
@@ -354,7 +356,7 @@ class BlockRestoreComplete(TransferComplete):
         owner = self.downloader
         owner.local_blocks[self.block_id] = True
         if sum(owner.local_blocks) == owner.k:  # we have exactly k local blocks, we have all of them then
-            return self # ...
+            return self
 
 
 def main():
