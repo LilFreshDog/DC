@@ -47,7 +47,7 @@ class MMN(Simulation):
     
     def print_queue(self):
         """ print number of jobs in each queue """
-        print([self.queue_len(i) for i in range(self.n)])
+        print([self.queue_len(i) for i in range(self.n)], end="\r")
 
     def schedule_arrival(self, job_id, queue_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
@@ -69,7 +69,7 @@ class Arrival(Event):
         self.queue_id = queue_id
 
     def process(self, sim: MMN):
-        #set the arrival time of the job
+        # set the arrival time of the job
         sim.arrivals[self.id] = sim.t
         
         # queue_id = sample(range(len(sim.queues)), 1)[0] # uncomment to select a random queue
@@ -94,8 +94,7 @@ class Completion(Event):
 
     def process(self, sim: MMN):
         assert sim.running[self.queue_id] is not None
-        # DEBUG
-        sim.print_queue() if sim.n <= 10 else None
+        # DEBUG # sim.print_queue() if sim.n <= 10 else None
         # set the completion time of the running job
         sim.completions[sim.running[self.queue_id]] = sim.t
         # if the queue is not empty
@@ -108,6 +107,29 @@ class Completion(Event):
             sim.running[self.queue_id] = None
 
 
+def show_graphs(sim: MMN):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    print("Creating graphs...")
+    queue_lenths = [len(queue) for queue in sim.queues if len(queue) > 0 ]
+    #print(queue_lenths)
+    import collections
+    counter = collections.Counter(queue_lenths)
+    # sort counter
+    counter = collections.OrderedDict(sorted(counter.items()))
+    print(counter)
+    
+    #modify counter so that the values are the percentage 
+    for key in counter:
+        counter[key] = counter[key] / len(queue_lenths)
+    
+    plt.plot(*zip(*sorted(counter.items())))
+
+    plt.xlabel("Queue length")
+    plt.ylabel("Fraction of queues with at leas that size")
+    plt.show()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lambd', type=float, default=0.7)
@@ -116,6 +138,7 @@ def main():
     parser.add_argument('--n', type=int, default=1)
     parser.add_argument('--d', type=int, default=1) #number of queues to be use as a subset
     parser.add_argument('--csv', help="CSV file in which to store results")
+    parser.add_argument('--graph', action='store_true', default=False, help="Enable graphing of results")
     args = parser.parse_args()
 
     sim = MMN(args.lambd, args.mu, args.n, args.d)
@@ -130,6 +153,9 @@ def main():
         with open(args.csv, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([args.lambd, args.mu, args.max_t, W])
+
+    if args.graph:
+        show_graphs(sim)
 
 
 if __name__ == '__main__':
