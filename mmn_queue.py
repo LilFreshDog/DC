@@ -21,8 +21,7 @@ class MMN(Simulation):
         self.running = [None] * n 
         #self.queue = collections.deque()  # FIFO queue of the system
         self.queues = [collections.deque() for i in range(n)]  # FIFO queues of the system
-        self.queue_counter = [0] * n # average length of the queues
-        self.total_jobs = 0  # total number of jobs ever entered in the system (?)
+        self.queue_counter = [[]] * n # average length of the queues
         self.arrivals = {}  # dictionary mapping job id to arrival time
         self.completions = {}  # dictionary mapping job id to completion time
         self.lambd = lambd # arrival rate
@@ -71,11 +70,10 @@ class Arrival(Event):
     def process(self, sim: MMN):
         # set the arrival time of the job
         sim.arrivals[self.id] = sim.t
-        sim.total_jobs += 1
         
         # queue_id = randint(0, sim.n) # uncomment to select a random queue
         queue_id = sim.get_min_queue() # uncomment to select the shortest queue (supermarket model)
-        sim.queue_counter[queue_id] += 1
+        sim.queue_counter[queue_id].append(sim.queue_len(queue_id))
 
         # if there is no running job in the current queue, start the job
         if sim.running[queue_id] is None:
@@ -110,7 +108,7 @@ class Completion(Event):
             sim.running[self.queue_id] = None
 
 
-def show_graphs(result_queues: list, average_queue_lengths: list, lambdas: list, max_t: int):
+def show_graphs(result_queues: list, average_queue_lengths: list, lambdas: list):
     import matplotlib.pyplot as plt
     import numpy as np
     import collections
@@ -120,7 +118,9 @@ def show_graphs(result_queues: list, average_queue_lengths: list, lambdas: list,
 
     for i, queue in enumerate(average_queue_lengths):
         #queue_lengths = [len(queue) for queue in result_queues[i] if len(queue) > 0]  
-        av_queue_lengths = [length/max_t for length in average_queue_lengths[i] if len(queue) > 0]
+        av_queue_lengths = [collections.Counter(length).most_common(1) for length in average_queue_lengths[i] if len(queue) > 0]
+        print("lista di mode")
+        print(av_queue_lengths)
         counter = collections.Counter(av_queue_lengths)
         counter = collections.OrderedDict(sorted(counter.items()))
         for key,value in counter.items():
@@ -169,12 +169,10 @@ def main():
                 writer.writerow([args.lambd, args.mu, args.max_t, W])
 
         result_queues.append(sim.queues)
-        average_queues_lenghts.append(sim.queue_counter)
-        print(sim.queue_counter)
-        print([counter/sim.total_jobs for counter in sim.queue_counter], end=" ")
-        print()
+        average_queues_lenghts.append(sim.queue_counter)    
+
     if args.graph:
-        show_graphs(result_queues, average_queues_lenghts, lambdas_x, sim.total_jobs)
+        show_graphs(result_queues, average_queues_lenghts, lambdas_x)
 
 
 
