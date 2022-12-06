@@ -37,7 +37,7 @@ class MMN(Simulation):
                 self.queue_lengths[len(self.queues[i])] = 1
     
     def get_min_queue(self) -> int:
-        """ returns id of the shortest length queue selected from a subset `d` (supermarket model) """
+        """(supermarket model) returns id of the shortest length queue selected from a subset `d`"""
         sampled_queues_ids = sample(range(self.n), self.d)
 
         # updating queue lenghts dict for graph
