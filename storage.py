@@ -356,7 +356,8 @@ class BlockRestoreComplete(TransferComplete):
         owner = self.downloader
         owner.local_blocks[self.block_id] = True
         if sum(owner.local_blocks) == owner.k:  # we have exactly k local blocks, we have all of them then
-            return self
+            for i in range(owner.local_blocks):
+                owner.local_blocks[i] = True
 
 
 def main():
