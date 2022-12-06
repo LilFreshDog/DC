@@ -3,27 +3,19 @@
 import argparse
 import csv
 import collections
-from random import expovariate, sample, randint
+from random import expovariate, sample
 
 from discrete_event_sim import Simulation, Event
-
-# To use weibull variates, for a given set of parameter do something like
-# from weibull import weibull_generator
-# gen = weibull_generator(shape, mean)
-#
-# and then call gen() every time you need a random variable
-
 
 class MMN(Simulation):
 
     def __init__(self, lambd, mu, n, d):
         super().__init__()
         self.running = [None] * n 
-        #self.queue = collections.deque()  # FIFO queue of the system
-        self.queues = [collections.deque() for i in range(n)]  # FIFO queues of the system
-        self.queue_counter = [[]] * n # average length of the queues
+        self.queues = [collections.deque() for i in range(n)] # FIFO queues of the system
         self.arrivals = {}  # dictionary mapping job id to arrival time
         self.completions = {}  # dictionary mapping job id to completion time
+        self.queue_lengths = {}
         self.lambd = lambd # arrival rate
         self.mu = mu # completion rate
         self.n = n if n > 0 else 1 # number of queues
@@ -33,21 +25,33 @@ class MMN(Simulation):
             print("\nINFO:\n  'd' must be in the range (0, n]\n  automatically set 'd' to 'n'\n")
             self.d = n
         self.arrival_rate = lambd * n
-        self.completion_rate = mu 
+        self.completion_rate = mu
         self.schedule(expovariate(lambd), Arrival(0))
+
+    def update_queue_lenghts_dict(self, sampled_queues_ids: list):
+        for i in sampled_queues_ids:
+            #if len(self.queues[i]) != 0:
+            if len(self.queues[i]) in self.queue_lengths:
+                self.queue_lengths[len(self.queues[i])] += 1
+            else:
+                self.queue_lengths[len(self.queues[i])] = 1
     
     def get_min_queue(self) -> int:
         """ returns id of the shortest length queue selected from a subset `d` (supermarket model) """
         sampled_queues_ids = sample(range(self.n), self.d)
-        min_queue_id = 0
+
+        # updating queue lenghts dict for graph
+        self.update_queue_lenghts_dict(sampled_queues_ids)
+
+        min_queue_id = sampled_queues_ids[0]
         for i in sampled_queues_ids:
             if len(self.queues[i]) < len(self.queues[min_queue_id]):
                 min_queue_id = i
         return min_queue_id
     
-    def print_queue(self):
+    def print_queues(self):
         """ print number of jobs in each queue """
-        print([self.queue_len(i) for i in range(self.n)], end="\n")
+        print([self.queue_len(i) for i in range(self.n)], end="\r")
 
     def schedule_arrival(self, job_id):
         # schedule the arrival following an exponential distribution, to compensate the number of queues the arrival
@@ -59,7 +63,7 @@ class MMN(Simulation):
         self.schedule(expovariate(self.completion_rate), Completion(job_id, queue_id))
 
     def queue_len(self, queue_id):
-        return (self.running[queue_id] is None) + len(self.queues[queue_id])
+        return len(self.queues[queue_id])
 
 
 class Arrival(Event):
@@ -71,9 +75,8 @@ class Arrival(Event):
         # set the arrival time of the job
         sim.arrivals[self.id] = sim.t
         
-        # queue_id = randint(0, sim.n) # uncomment to select a random queue
+        # queue_id = sample(range(len(sim.queues)), 1)[0] # uncomment to select a random queue
         queue_id = sim.get_min_queue() # uncomment to select the shortest queue (supermarket model)
-        sim.queue_counter[queue_id].append(sim.queue_len(queue_id))
 
         # if there is no running job in the current queue, start the job
         if sim.running[queue_id] is None:
@@ -94,8 +97,7 @@ class Completion(Event):
 
     def process(self, sim: MMN):
         assert sim.running[self.queue_id] is not None
-        # DEBUG 
-        sim.print_queue() if sim.n <= 10 else None
+        # DEBUG # sim.print_queue() if sim.n <= 10 else None
         # set the completion time of the running job
         sim.completions[sim.running[self.queue_id]] = sim.t
         # if the queue is not empty
@@ -108,72 +110,93 @@ class Completion(Event):
             sim.running[self.queue_id] = None
 
 
-def show_graphs(result_queues: list, average_queue_lengths: list, lambdas: list):
+def show_single_graph(sim: MMN):
     import matplotlib.pyplot as plt
-    import numpy as np
-    import collections
+    
+    sum_all_queue_lenghts = sum(sim.queue_lengths.values())
+    normalized_queues_lengths = {}
+    acc = 0
+    for length, occurrences in sorted(sim.queue_lengths.items()):
+        normalized_queues_lengths[length] = (sum_all_queue_lenghts - acc) / sum_all_queue_lenghts
+        acc += occurrences
 
-    print("Creating graphs...")
-    counters = []
+    plt.plot(list(normalized_queues_lengths.keys()), list(normalized_queues_lengths.values()))
+    plt.grid(True)
+    plt.xlim(0, 14)
+    # plt.ylim(0, 1)
+    plt.xlabel("Queue length")
+    plt.ylabel("Fraction of queues with at leas that size")
+    plt.title(str(sim.d) + " choice" + ("s" if sim.d != 1 else ""))
+    plt.show()
 
-    for i, queue in enumerate(average_queue_lengths):
-        #queue_lengths = [len(queue) for queue in result_queues[i] if len(queue) > 0]  
-        av_queue_lengths = [collections.Counter(length).most_common(1) for length in average_queue_lengths[i] if len(queue) > 0]
-        print("lista di mode")
-        print(av_queue_lengths)
-        counter = collections.Counter(av_queue_lengths)
-        counter = collections.OrderedDict(sorted(counter.items()))
-        for key,value in counter.items():
-            counter[key] = value/len(av_queue_lengths)
-        counters.append(counter)
 
-    plt.title("Distribution of queue lengths")
-    plt.plot(*zip(*sorted(counters[0].items())), label="lambda = {}".format(lambdas[0]))
-    plt.plot(*zip(*sorted(counters[1].items())), label="lambda = {}".format(lambdas[1]))
-    plt.plot(*zip(*sorted(counters[2].items())), label="lambda = {}".format(lambdas[2]))
-    plt.plot(*zip(*sorted(counters[3].items())), label="lambda = {}".format(lambdas[3]))
+def show_all_graphs(lambdas, simulation_queue_lengths, d):
+    import matplotlib.pyplot as plt
+
+    for i in range(len(lambdas)):
+        final_results= dict(sorted(simulation_queue_lengths[i].items(), key=lambda item: item[0]))
+        final_results = {k: v/sum(final_results.values()) for k, v in final_results.items()}
+        
+        sum_all_queue_lenghts = sum(simulation_queue_lengths[i].values())
+        normalized_queues_lengths = {}
+        acc = 0
+        for length, occurrences in sorted(simulation_queue_lengths[i].items()):
+            normalized_queues_lengths[length] = (sum_all_queue_lenghts - acc) / sum_all_queue_lenghts
+            acc += occurrences
+        
+        plt.plot(list(normalized_queues_lengths.keys()), list(normalized_queues_lengths.values()), label="lambda = " + str(lambdas[i]))
+    
+    plt.grid(True)
     plt.xlim(0, 14)
     plt.ylim(0, 1)
     plt.xlabel("Queue length")
     plt.ylabel("Fraction of queues with at leas that size")
-    plt.legend()
+    plt.title("")
+    plt.title(str(d) + " choice" + ("s" if d != 1 else ""))
     plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--lambd', type=float, default=0.7)
-    parser.add_argument('--mu', type=float, default=1)
-    parser.add_argument('--max-t', type=float, default=1_000_000)
-    parser.add_argument('--n', type=int, default=1)
-    parser.add_argument('--d', type=int, default=1) #number of queues to be use as a subset
+    parser.add_argument('--lambd', type=float, help="jobs arrival rate")
+    parser.add_argument('--mu', type=float, default=1, help="jobs completion rate")
+    parser.add_argument('--max-t', type=float, default=1_000_000, help="maximum simulation time")
+    parser.add_argument('--n', type=int, default=1, help="number of simulated queues")
+    parser.add_argument('--d', type=int, default=1, help="number of queues to monitor when choosing the min queue") #number of queues to be use as a subset
     parser.add_argument('--csv', help="CSV file in which to store results")
     parser.add_argument('--graph', action='store_true', default=False, help="Enable graphing of results")
+    parser.add_argument('--run-all', action='store_true', default=False, help="Run simulations for all lambdas (0.5, 0.9, 0.95, 0.99)")
     args = parser.parse_args()
 
-    result_queues = []
-    average_queues_lenghts = []
-    lambdas_x = [0.5, 0.90,  0.95, 0.99]
-    for lambd_x in lambdas_x:
-        sim = MMN(lambd_x, args.mu, args.n, args.d)
+    if args.lambd is None:
+        args.lambd = 0.5
+
+    if args.run_all:
+        lambdas = [0.5, 0.9, 0.95, 0.99]
+    else:
+        lambdas = [args.lambd]
+    
+    simulation_queue_lengths = []
+    for lambd in lambdas:
+        sim = MMN(lambd, args.mu, args.n, args.d)
         sim.run(args.max_t)
 
         completions = sim.completions
         W = (sum(completions.values()) - sum(sim.arrivals[job_id] for job_id in completions)) / len(completions)
         print(f"Average time spent in the system: {W}")
-        print(f"Theoretical expectation for random server choice: {1 / (1 - args.lambd ) if args.lambd < 1 else 'inf'}")
+        print(f"Theoretical expectation for random server choice: {1 / (1 - lambd) if lambd < 1 else 'inf'}")
 
         if args.csv is not None:
             with open(args.csv, 'a', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([args.lambd, args.mu, args.max_t, W])
+                writer.writerow([lambd, args.mu, args.max_t, W])
+        
+        simulation_queue_lengths.append(sim.queue_lengths)
 
-        result_queues.append(sim.queues)
-        average_queues_lenghts.append(sim.queue_counter)    
-
-    if args.graph:
-        show_graphs(result_queues, average_queues_lenghts, lambdas_x)
-
+    if args.run_all:
+        show_all_graphs(lambdas, simulation_queue_lengths, args.d)
+    elif args.graph:
+        show_single_graph(sim)
 
 
 if __name__ == '__main__':
