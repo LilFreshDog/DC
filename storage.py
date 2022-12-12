@@ -15,6 +15,8 @@ from typing import Optional, List
 from humanfriendly import format_timespan, parse_size, parse_timespan
 from discrete_event_sim import Simulation, Event
 
+global DEBUG # set to True to enable debug logging
+
 
 def exp_rv(mean):
     """Return an exponential random variable with the given mean."""
@@ -64,8 +66,8 @@ class Backup(Simulation):
         self.schedule(delay, event)
         uploader.current_upload = downloader.current_download = event
 
-        # self.log_info(f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"
-        #               f" in {format_timespan(delay)}")
+        if DEBUG:
+            self.log_info(f"scheduled {event.__class__.__name__} from {uploader} to {downloader}"f" in {format_timespan(delay)}")
 
     def log_info(self, msg):
         """Override method to get human-friendly logging for time."""
@@ -169,12 +171,20 @@ class Node:
         block_id = self.find_block_to_back_up()
         if block_id is None:
             return
-        # sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
+        if DEBUG:
+            sim.log_info(f"{self} is looking for somebody to back up block {block_id}")
         remote_owners = set(node for node in self.backed_up_blocks if node is not None)  # nodes having one block
         for peer in sim.nodes:
             # if the peer is not self, is online, is not among the remote owners, has enough space and is not
             # downloading anything currently, schedule the backup of block_id from self to peer
-            if (peer is not self and peer.online and peer not in remote_owners and peer.current_download is None and peer.free_space >= self.block_size):
+            if (
+                    peer is not self
+                    and peer.online
+                    and peer not in remote_owners
+                    and peer.current_download is None
+                    and peer.free_space >= self.block_size
+                    and peer.name.startswith("server") # backup only on servers, not on clients
+                ):
                 sim.schedule_transfer(self, peer, block_id, False)
                 return
 
@@ -183,7 +193,8 @@ class Node:
 
         assert self.online
 
-        # sim.log_info(f"schedule_next_download on {self}")
+        if DEBUG:
+            sim.log_info(f"schedule_next_download on {self}")
 
         if self.current_download is not None:
             return
@@ -239,7 +250,7 @@ class Online(NodeEvent):
         node.schedule_next_upload(sim)
         node.schedule_next_download(sim)
         # schedule the next offline event
-        sim.schedule(exp_rv(node.average_lifetime), Offline(node))
+        sim.schedule(exp_rv(node.average_uptime), Offline(node)) # il nodo rimane online in base a average_uptime
         
 
 
@@ -356,8 +367,9 @@ class BlockRestoreComplete(TransferComplete):
         owner = self.downloader
         owner.local_blocks[self.block_id] = True
         if sum(owner.local_blocks) == owner.k:  # we have exactly k local blocks, we have all of them then
-            for i in range(owner.local_blocks):
-                owner.local_blocks[i] = True
+            # for block in owner.local_blocks:
+            #     block = True
+            owner.local_blocks = [True] * owner.n
 
 
 def main():
@@ -365,13 +377,17 @@ def main():
     parser.add_argument("config", help="configuration file")
     parser.add_argument("--max-t", default="100 years")
     parser.add_argument("--seed", help="random seed")
-    parser.add_argument("--verbose", action='store_true')
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--debug", action="store_true", default=False)
     args = parser.parse_args()
+
+    global DEBUG
+    DEBUG = args.debug
 
     if args.seed:
         random.seed(args.seed)  # set a seed to make experiments repeatable
     if args.verbose:
-        logging.basicConfig(format='{levelname}:{message}', level=logging.INFO, style='{')  # output info on stdout
+        logging.basicConfig(format='{levelname}:{message}', level=logging.INFO, style='{', filename="out.log", filemode='w')  # output info on stdout
 
     # functions to parse every parameter of peer configuration
     parsing_functions = [
