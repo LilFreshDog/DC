@@ -93,8 +93,8 @@ class Node:
     n: int  # number of blocks in which the data is encoded
     k: int  # number of blocks sufficient to recover the whole node's data
 
-    data_size: int  # amount of data to back up (in bytes)
-    storage_size: int  # storage space devoted to storing remote data (in bytes)
+    data_size: int  # amount of own data to back up (in bytes)
+    storage_size: int  # total storage space (own data + remote data (in bytes))
 
     upload_speed: float  # node's upload speed, in bytes per second
     download_speed: float  # download speed
@@ -208,7 +208,7 @@ class Node:
         # try to back up a block for a remote node
         for peer in sim.nodes:
             if (peer is not self and peer.online and peer.current_upload is None and peer not in self.remote_blocks_held
-                    and self.free_space >= peer.block_size):
+                    and self.free_space >= peer.block_size and self.name.startswith("server")):
                 block_id = peer.find_block_to_back_up()
                 if block_id is not None:
                     sim.schedule_transfer(peer, self, block_id, False)
