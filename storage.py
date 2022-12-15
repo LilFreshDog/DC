@@ -427,5 +427,17 @@ def main():
     data_loss_ratio = 1 - (len([node for node in nodes if sum(node.local_blocks) >= node.k and not node.name.startswith('server')]) / len([node for node in nodes if not node.name.startswith('server')]))
     print(f"data loss ratio: {data_loss_ratio:.2%}")
 
+    '''
+    print node.local_blocks node.backed_up_blocks node.local_blocks_held node.remote_blocks_held as a table
+    '''
+    print(f"{'node':<20}{'local_blocks':<20}{'backed_up_blocks':<20}{'remote_blocks_held':<20}")
+    for node in nodes:
+        #if not node.name.startswith('server'):
+        print(f"{node.name:<20}", end='')
+        print(f"{sum(node.local_blocks):<20}", end='')
+        print(f"{sum(peer is not None for peer in node.backed_up_blocks):<20}", end='')
+        print(f"{len(node.remote_blocks_held.values()):<20}", end='')
+        print()
+
 if __name__ == '__main__':
     main()
