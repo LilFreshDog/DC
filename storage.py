@@ -367,8 +367,7 @@ class BlockRestoreComplete(TransferComplete):
         owner = self.downloader
         owner.local_blocks[self.block_id] = True
         if sum(owner.local_blocks) == owner.k:  # we have exactly k local blocks, we have all of them then
-            # for block in owner.local_blocks:
-            #     block = True
+            #### INFO:   condition 👆🏻 shoudn't be >= instead of ==?
             owner.local_blocks = [True] * owner.n
 
 
@@ -415,15 +414,18 @@ def main():
 
     # print node.local_blocks node.backed_up_blocks as a string of 0s and 1s
 
-    print(f"{'node':<10}{'local':<20}{'remote':<20}{'total':<20}")
+    lenname = max(len(node.name) for node in nodes)+2
+    lenblocks = max(node.n for node in nodes)+2
+    print(f"{'node':<{lenname}}{'local':<{lenblocks}}{'remote':<{lenblocks}}{'total':<{lenblocks}}")
     for node in nodes:
-        print(f"{node.name:<10}{''.join(str(int(x)) for x in node.local_blocks):<20}", end='')
-        print(f"{''.join(str(int(x is not None)) for x in node.backed_up_blocks):<20}", end='')
-        print(f"{''.join((str(int(x)) for x in node.local_blocks) or (str(int(x is not None)) for x in node.backed_up_blocks)):<20}", end='')
-        print("✅ has all data" if sum(node.local_blocks) >= node.k else "❌ lost data", end='')
-        print()
-    print("data loss ratio:", sum(node.local_blocks.count(False) for node in nodes) / (len(nodes) * nodes[0].n), end='')
-
+        if not node.name.startswith('server'):
+            print(f"{node.name:<{lenname}}{''.join(str(int(x)) for x in node.local_blocks):<{lenblocks}}", end='')
+            print(f"{''.join(str(int(x is not None)) for x in node.backed_up_blocks):<{lenblocks}}", end='')
+            print(f"{''.join((str(int(x)) for x in node.local_blocks) or (str(int(x is not None)) for x in node.backed_up_blocks)):<{lenblocks}}", end='')
+            print("✅ has all data" if sum(node.local_blocks) >= node.k else "❌ lost data", end='')
+            print()
+    data_loss_ratio = 1 - (len([node for node in nodes if sum(node.local_blocks) >= node.k and not node.name.startswith('server')]) / len([node for node in nodes if not node.name.startswith('server')]))
+    print(f"data loss ratio: {data_loss_ratio:.2%}")
 
 if __name__ == '__main__':
     main()
