@@ -183,7 +183,7 @@ class Node:
                     and peer not in remote_owners
                     and peer.current_download is None
                     and peer.free_space >= self.block_size
-                    and peer.name.startswith("server") # backup only on servers, not on clients
+                    and not peer.name.startswith("client") # backup only on servers, not on clients
                 ):
                 sim.schedule_transfer(self, peer, block_id, False)
                 return
@@ -208,7 +208,7 @@ class Node:
         # try to back up a block for a remote node
         for peer in sim.nodes:
             if (peer is not self and peer.online and peer.current_upload is None and peer not in self.remote_blocks_held
-                    and self.free_space >= peer.block_size and self.name.startswith("server")):
+                    and self.free_space >= peer.block_size and not self.name.startswith("client")):
                 block_id = peer.find_block_to_back_up()
                 if block_id is not None:
                     sim.schedule_transfer(peer, self, block_id, False)
@@ -387,7 +387,8 @@ def main():
     if args.seed:
         random.seed(args.seed)  # set a seed to make experiments repeatable
     if args.verbose:
-        logging.basicConfig(format='{levelname}:{message}', level=logging.INFO, style='{', filename="out.log", filemode='w')  # output info on stdout
+        filename = args.config.replace("config/", "log/").replace(".cfg", ".log")
+        logging.basicConfig(format='{levelname}:{message}', level=logging.INFO, style='{', filename=filename, filemode='w')  # output info on stdout
 
     # functions to parse every parameter of peer configuration
     parsing_functions = [
@@ -411,6 +412,17 @@ def main():
     sim = Backup(nodes)
     sim.run(parse_timespan(args.max_t))
     sim.log_info(f"Simulation over")
+
+    # print node.local_blocks node.backed_up_blocks as a string of 0s and 1s
+
+    print(f"{'node':<10}{'local':<20}{'remote':<20}{'total':<20}")
+    for node in nodes:
+        print(f"{node.name:<10}{''.join(str(int(x)) for x in node.local_blocks):<20}", end='')
+        print(f"{''.join(str(int(x is not None)) for x in node.backed_up_blocks):<20}", end='')
+        print(f"{''.join((str(int(x)) for x in node.local_blocks) or (str(int(x is not None)) for x in node.backed_up_blocks)):<20}", end='')
+        print("✅ has all data" if sum(node.local_blocks) >= node.k else "❌ lost data", end='')
+        print()
+    print("data loss ratio:", sum(node.local_blocks.count(False) for node in nodes) / (len(nodes) * nodes[0].n), end='')
 
 
 if __name__ == '__main__':
