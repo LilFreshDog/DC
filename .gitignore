@@ -6,5 +6,5 @@ __pycache__
 out.csv
 log
 .ipynb_checkpoints/Relazione-checkpoint.txt
-.gitignore
-.gitignore
+data_out.csv
+plots-checkpoint.ipynb
