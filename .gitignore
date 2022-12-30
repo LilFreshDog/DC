@@ -5,3 +5,6 @@ __pycache__
 .DS_Store
 out.csv
 log
+.ipynb_checkpoints/Relazione-checkpoint.txt
+.gitignore
+.gitignore

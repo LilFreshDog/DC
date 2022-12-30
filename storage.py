@@ -7,6 +7,7 @@ import random
 from dataclasses import dataclass
 from random import expovariate
 from typing import Optional, List
+from alive_progress import alive_bar # cool progress bar
 
 # the humanfriendly library (https://humanfriendly.readthedocs.io/en/latest/) lets us pass parameters in human-readable
 # format (e.g., "500 KiB" or "5 days"). You can safely remove this if you don't want to install it on your system, but
@@ -378,6 +379,7 @@ def main():
     parser.add_argument("--seed", help="random seed")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--debug", action="store_true", default=False)
+    parser.add_argument("--sim-number", type=int, default=1, help="number of simulations to run")
     args = parser.parse_args()
 
     global DEBUG
@@ -399,45 +401,57 @@ def main():
         ('arrival_time', parse_timespan)
     ]
 
-    config = configparser.ConfigParser()
-    config.read(args.config)
-    nodes = []  # we build the list of nodes to pass to the Backup class
-    for node_class in config.sections():
-        class_config = config[node_class]
-        # list comprehension: https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions
-        cfg = [parse(class_config[name]) for name, parse in parsing_functions]
-        # the `callable(p1, p2, *args)` idiom is equivalent to `callable(p1, p2, args[0], args[1], ...)
-        nodes.extend(Node(f"{node_class}-{i}", *cfg) for i in range(class_config.getint('number')))
-    sim = Backup(nodes)
-    sim.run(parse_timespan(args.max_t))
-    sim.log_info(f"Simulation over")
+    data_loss_ratios = []
+    repetitions = args.sim_number
+    with alive_bar(repetitions) as bar:
+        for i in range(repetitions):
+            config = configparser.ConfigParser()
+            config.read(args.config)
+            nodes = []  # we build the list of nodes to pass to the Backup class
+            for node_class in config.sections():
+                class_config = config[node_class]
+                # list comprehension: https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions
+                cfg = [parse(class_config[name]) for name, parse in parsing_functions]
+                # the `callable(p1, p2, *args)` idiom is equivalent to `callable(p1, p2, args[0], args[1], ...)
+                nodes.extend(Node(f"{node_class}-{i}", *cfg) for i in range(class_config.getint('number')))
+            sim = Backup(nodes)
+            sim.run(parse_timespan(args.max_t))
+            sim.log_info(f"Simulation over")
+            bar()
 
-    # print node.local_blocks node.backed_up_blocks as a string of 0s and 1s
+            # print the state of the system
+            # print node.local_blocks node.backed_up_blocks as a string of 0s and 1s
+            if DEBUG:
+                lenname = max(len(node.name) for node in nodes)+2
+                lenblocks = max(node.n for node in nodes)+2
+                print(f"{'node':<{lenname}}{'local':<{lenblocks}}{'remote':<{lenblocks}}{'total':<{lenblocks}}")
+                for node in nodes:
+                    if not node.name.startswith('server'):
+                        print(f"{node.name:<{lenname}}{''.join(str(int(x)) for x in node.local_blocks):<{lenblocks}}", end='')
+                        print(f"{''.join(str(int(x is not None)) for x in node.backed_up_blocks):<{lenblocks}}", end='')
+                        print(f"{''.join((str(int(x)) for x in node.local_blocks) or (str(int(x is not None)) for x in node.backed_up_blocks)):<{lenblocks}}", end='')
+                        print("✅ has all data" if sum(node.local_blocks) >= node.k else "❌ lost data", end='')
+                        print()
 
-    lenname = max(len(node.name) for node in nodes)+2
-    lenblocks = max(node.n for node in nodes)+2
-    print(f"{'node':<{lenname}}{'local':<{lenblocks}}{'remote':<{lenblocks}}{'total':<{lenblocks}}")
-    for node in nodes:
-        if not node.name.startswith('server'):
-            print(f"{node.name:<{lenname}}{''.join(str(int(x)) for x in node.local_blocks):<{lenblocks}}", end='')
-            print(f"{''.join(str(int(x is not None)) for x in node.backed_up_blocks):<{lenblocks}}", end='')
-            print(f"{''.join((str(int(x)) for x in node.local_blocks) or (str(int(x is not None)) for x in node.backed_up_blocks)):<{lenblocks}}", end='')
-            print("✅ has all data" if sum(node.local_blocks) >= node.k else "❌ lost data", end='')
-            print()
-    data_loss_ratio = 1 - (len([node for node in nodes if sum(node.local_blocks) >= node.k and not node.name.startswith('server')]) / len([node for node in nodes if not node.name.startswith('server')]))
-    print(f"data loss ratio: {data_loss_ratio:.2%}")
+            # calculate the data loss ratio
+            data_loss_ratio = 1 - (len([node for node in nodes if sum(node.local_blocks) >= node.k and not node.name.startswith('server')]) / len([node for node in nodes if not node.name.startswith('server')]))
+            data_loss_ratios.append(data_loss_ratio)
+            if DEBUG:
+                print(f"data loss ratio: {data_loss_ratio:.2%}")
 
-    '''
-    print node.local_blocks node.backed_up_blocks node.local_blocks_held node.remote_blocks_held as a table
-    '''
-    print(f"{'node':<20}{'local_blocks':<20}{'backed_up_blocks':<20}{'remote_blocks_held':<20}")
-    for node in nodes:
-        #if not node.name.startswith('server'):
-        print(f"{node.name:<20}", end='')
-        print(f"{sum(node.local_blocks):<20}", end='')
-        print(f"{sum(peer is not None for peer in node.backed_up_blocks):<20}", end='')
-        print(f"{len(node.remote_blocks_held.values()):<20}", end='')
-        print()
+            # print node.local_blocks node.backed_up_blocks node.local_blocks_held node.remote_blocks_held as a table
+            if DEBUG:
+                print(f"{'node':<20}{'local_blocks':<20}{'backed_up_blocks':<20}{'remote_blocks_held':<20}")
+                for node in nodes:
+                    #if not node.name.startswith('server'):
+                    print(f"{node.name:<20}", end='')
+                    print(f"{sum(node.local_blocks):<20}", end='')
+                    print(f"{sum(peer is not None for peer in node.backed_up_blocks):<20}", end='')
+                    print(f"{len(node.remote_blocks_held.values()):<20}", end='')
+                    print()
+
+    print("Simulation over, data loss ratios:")
+    print(data_loss_ratios)
 
 if __name__ == '__main__':
     main()
